@@ -20,20 +20,22 @@ class CodecCollate(object):
         # print(len(batch))
         # print(batch[0])
         # input()
-        all_encoder_input_ids = [b["input_ids"] for b in batch]
-        all_decoder_input_ids = [b["decoder_input_ids"] for b in batch]
+        all_encoder_input_ids = [b["e_input_ids"] for b in batch]
+        all_decoder_input_ids = [b["input_ids"] for b in batch]
         labels = [b["labels"] for b in batch]
 
+        # decoder only model need to apply left-padding!
         all_encoder_input_ids, attention_mask = pad_sequences_and_create_masks(all_encoder_input_ids, max_length=None,
                                                                 padding_value=self.tokenizer.pad_token_id)
         all_decoder_input_ids, _ = pad_sequences_and_create_masks(all_decoder_input_ids, max_length=None,
-                                                            padding_value=self.tokenizer.pad_token_id)
+                                                            padding_value=self.tokenizer.pad_token_id, is_left=True)
         labels, _ = pad_sequences_and_create_masks(labels, max_length=None,
-                                                padding_value=-100)
+                                                padding_value=-100, is_left=True)
+        
         return {
-            "input_ids": torch.LongTensor(all_encoder_input_ids),
-            "attention_mask": torch.LongTensor(attention_mask),
-            "decoder_input_ids": torch.LongTensor(all_decoder_input_ids),
+            "e_input_ids": torch.LongTensor(all_encoder_input_ids),
+            "e_attention_mask": torch.LongTensor(attention_mask),
+            "input_ids": torch.LongTensor(all_decoder_input_ids),
             "labels": torch.LongTensor(labels),
         }
 
@@ -47,12 +49,12 @@ class CodecCollate(object):
         max_length = self.model_config["max_length"]
         bos_token_id = tokenizer.bos_token_id
         eos_token_id = tokenizer.eos_token_id
-        sep_token_id = tokenizer.sep_token_id
+        # sep_token_id = tokenizer.sep_token_id
+        sep_token_id = 35  # Use ":", currently sep token id == eos token id
         pad_token_id = tokenizer.pad_token_id
 
         for b in range(len(batch["instruction"])):
             instruction_ids = tokenizer(batch["instruction"][b])["input_ids"][1 : -1]
-            # transcription_ids = tokenizer(batch["transcription"][b])["input_ids"][1 : -1]
 
             # Encoder input
             encoder_input_ids = [bos_token_id] + instruction_ids + [eos_token_id]
@@ -73,24 +75,19 @@ class CodecCollate(object):
             all_decoder_input_ids.append(decoder_input_ids)
             labels.append(decoder_output_ids)
 
-        all_encoder_input_ids, attention_mask = pad_sequences_and_create_masks(all_encoder_input_ids, max_length=None,
-                                                                padding_value=pad_token_id)
-        all_decoder_input_ids, _ = pad_sequences_and_create_masks(all_decoder_input_ids, max_length=None,
-                                                            padding_value=pad_token_id)
-        labels, _ = pad_sequences_and_create_masks(labels, max_length=None,
-                                                padding_value=-100)
-
         return {
-            "input_ids": all_encoder_input_ids,
-            # "attention_mask": attention_mask,
-            "decoder_input_ids": all_decoder_input_ids,
+            "e_input_ids": all_encoder_input_ids,
+            "input_ids": all_decoder_input_ids,
             "labels": labels
         }
 
 
-def pad_sequences_and_create_masks(sequences, max_length, padding_value):
+def pad_sequences_and_create_masks(sequences, max_length, padding_value, is_left=False):
     if max_length is None:
         max_length = max([len(sequence) for sequence in sequences])
-    padded_sequences = [sequence + [padding_value] * (max_length - len(sequence)) for sequence in sequences]
+    if is_left:
+        padded_sequences = [[padding_value] * (max_length - len(sequence)) + sequence for sequence in sequences]
+    else:
+        padded_sequences = [sequence + [padding_value] * (max_length - len(sequence)) for sequence in sequences]
     attention_masks = [[1 if token != padding_value else 0 for token in sequence] for sequence in padded_sequences]
     return padded_sequences, attention_masks

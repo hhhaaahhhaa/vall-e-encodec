@@ -40,7 +40,7 @@ class DataModule(object):
             cache_dir=Define.HF_CACHE_DIR
         )
         # Inference is slow
-        eval_dataset = eval_dataset.train_test_split(test_size=1000)["test"]
+        eval_dataset = eval_dataset.train_test_split(test_size=400)["test"]
 
         if Define.DEBUG:
             eval_dataset = eval_dataset.select(list(range(10)))

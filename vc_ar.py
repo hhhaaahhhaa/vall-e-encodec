@@ -1,9 +1,9 @@
 from argparse import ArgumentParser, Namespace
 
-# import wandb
+import wandb
 from jiwer import wer
-from transformers import (AutoTokenizer, BartForConditionalGeneration,
-                          Seq2SeqTrainer, Seq2SeqTrainingArguments, BartConfig)
+from transformers import (AutoTokenizer,
+                          Seq2SeqTrainer, Seq2SeqTrainingArguments, BartConfig, GenerationConfig)
 import os
 
 import Define
@@ -14,12 +14,13 @@ from systems.bart_vc_ar.expert import System
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-# wandb.init(project="encodec_vc", 
-#         name="speech-chatgpt-base-ar",
-# )
+# TODO: Change training arguments
+wandb.init(project="encodec_vc", 
+        name="speech-chatgpt-base-ar",
+)
 
 TRAIN_ARGS = Seq2SeqTrainingArguments(
-    output_dir="./training_output/speech-chatgpt-base-ar",
+    output_dir="./training_output/speech-chatgpt-base-ar-debug2",
     num_train_epochs=10,
     per_device_train_batch_size=6,
     per_device_eval_batch_size=6,
@@ -27,20 +28,20 @@ TRAIN_ARGS = Seq2SeqTrainingArguments(
     weight_decay=1e-2,
     logging_dir="./logs/speech-chatgpt-base-ar",
     logging_steps=500,
-    save_steps=1000,
+    save_steps=100,
     save_total_limit=5,
     evaluation_strategy="steps",
-    eval_steps=10000,
+    eval_steps=400,
     predict_with_generate=True,
     fp16=True,
     learning_rate=1e-5,
     generation_max_length=4096,
+    generation_num_beams=1,
     # push_to_hub=True,
     # hub_model_id="lca0503/speech-chatgpt-base-ar",
-    # report_to="wandb",
+    report_to="wandb",
 )
 
-# TODO: merge compute metrics into system
 def compute_metrics(eval_pred, tokenizer):
     predictions, labels = eval_pred
     
@@ -66,7 +67,7 @@ def compute_metrics(eval_pred, tokenizer):
 
 def main(args):
     config = BartConfig.from_pretrained("voidful/bart-base-unit")
-    config.update({"max_position_embeddings": 4096})
+    config.update({"max_position_embeddings": 4096, "tie_word_embeddings": False})
     model = System(config)
     model.load_hf_pretrained_bart()
     
@@ -79,7 +80,7 @@ def main(args):
     # TODO: load config from yaml instead of args
     data_config = {
         "name": args.dataset,
-        "codec_name": "speech_tokenizer",
+        "codec_name": "speech_tokenizer",  # change this for different codec
         "train_splits": args.train_splits,
         "eval_splits": args.eval_splits,
     }
@@ -94,6 +95,16 @@ def main(args):
         print("Dataset prepared.")
         input()
     
+    # Set generation config for evaluation
+    generation_config = GenerationConfig.from_model_config(model.config)
+    ar_tokens = [f"v_tok_{i}" for i in range(1024)]
+    ar_tokens.extend(["<s>", ":", "</s>", "<pad>"])
+    allowed_word_ids = [tokenizer.convert_tokens_to_ids(x) for x in ar_tokens]
+    ar_bad_words_ids = [[i] for i in range(tokenizer.vocab_size) if i not in allowed_word_ids]
+    generation_config.do_sample = True
+    generation_config.use_cache = True
+    generation_config.bad_words_ids = ar_bad_words_ids
+    TRAIN_ARGS.generation_config = generation_config
     trainer = Seq2SeqTrainer(
         model=model,
         args=TRAIN_ARGS,
