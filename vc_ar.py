@@ -11,8 +11,6 @@ from systems import get_system, get_datamodule
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-if Define.DEBUG:
-    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 # TODO: Change training arguments
@@ -21,7 +19,7 @@ wandb.init(project="encodec_vc",
 )
 
 TRAIN_ARGS = Seq2SeqTrainingArguments(
-    output_dir="./training_output/speech-chatgpt-base-ar-debug2",
+    output_dir="./training_output/t5_bart_vc_ar-debug0",
     num_train_epochs=10,
     per_device_train_batch_size=6,
     per_device_eval_batch_size=6,
@@ -67,7 +65,7 @@ def compute_metrics(eval_pred, tokenizer):
 
 
 def main(args):
-    system_name = "t5-base/bart"  # "bart/bart", "t5-base/bart"
+    system_name = "bart/bart"  # "bart/bart", "t5-base/bart"
     System, DataModule = get_system(system_name), get_datamodule(system_name)
     config = BartConfig.from_pretrained("voidful/bart-base-unit")
     config.update({"max_position_embeddings": 4096, "tie_word_embeddings": False})
@@ -89,6 +87,7 @@ def main(args):
     }
     model_config = {
         "tokenizer_name": "voidful/bart-base-unit",
+        # "encoder_tokenizer_name": "t5-base",  # uncomment this for t5 encoder
         "max_length": config.max_position_embeddings,
     }
     datamodule = DataModule(data_config, model_config, TRAIN_ARGS)
@@ -139,4 +138,6 @@ if __name__ == "__main__":
     args.dataset = "kuanhuggingface/google_tts_speech_tokenizer"
     args.model_name = "voidful/bart-base-unit"
     Define.DEBUG = args.debug
+    if Define.CUDA_LAUNCH_BLOCKING:
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     main(args)

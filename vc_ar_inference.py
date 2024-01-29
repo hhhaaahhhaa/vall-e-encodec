@@ -31,8 +31,10 @@ def pack_inputs(tokenizer, instruction_ids, src_ids):
     return inputs
 
 
-def ar_inference(ar_model, ar_tokenizer, dataset, bad_words_ids):
-    instruction_ids = ar_tokenizer(dataset["instruction"][0])["input_ids"][1 : -1]
+def ar_inference(ar_model, ar_tokenizer, dataset, bad_words_ids, ar_encoder_tokenizer=None):
+    if ar_encoder_tokenizer is None:
+        ar_encoder_tokenizer = ar_tokenizer
+    instruction_ids = ar_encoder_tokenizer(dataset["instruction"][0])["input_ids"][1 : -1]
     src_ids = ar_tokenizer.convert_tokens_to_ids(
         [f"v_tok_{u}" for u in dataset[f"src_speech_tokenizer_0"][0]])
     # print(instruction_ids, len(instruction_ids))
@@ -63,6 +65,8 @@ if __name__ == "__main__":
     dataset = dataset.shuffle(seed=666).select(range(1))
     
     checkpoint = "training_output/speech-chatgpt-base-ar-debug/checkpoint-1600/"
+    # checkpoint = "training_output/t5_bart_vc_ar-debug0/checkpoint-1600/"
+    
     ar_tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     ar_model = System.from_pretrained(checkpoint)
     ar_model.to("cuda")
@@ -71,4 +75,8 @@ if __name__ == "__main__":
     ar_tokens.extend(["</s>"])  # since prefix is given, <eos> becomes the only special token allowed.
     allowed_word_ids = [ar_tokenizer.convert_tokens_to_ids(x) for x in ar_tokens]
     ar_bad_words_ids = [[i] for i in range(ar_tokenizer.vocab_size) if i not in allowed_word_ids]
-    ar_inference(ar_model, ar_tokenizer, dataset, ar_bad_words_ids)
+    # ar_inference(ar_model, ar_tokenizer, dataset, ar_bad_words_ids)
+    
+    # T5
+    # x = AutoTokenizer.from_pretrained("t5-base", model_max_length=1024)
+    # ar_inference(ar_model, ar_tokenizer, dataset, ar_bad_words_ids, ar_encoder_tokenizer=x)

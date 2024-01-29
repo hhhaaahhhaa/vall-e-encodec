@@ -6,7 +6,7 @@ from . import t5_bart_vc_ar
 
 SYSTEM_ENC_DEC = {
     "bart/bart": (bart_vc_ar.System, bart_vc_ar.DataModule),
-    "t5-base/bart": (t5_bart_vc_ar.System, bart_vc_ar.DataModule),
+    "t5-base/bart": (t5_bart_vc_ar.System, t5_bart_vc_ar.DataModule),
 }
 
 
