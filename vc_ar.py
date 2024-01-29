@@ -7,11 +7,12 @@ from transformers import (AutoTokenizer,
 import os
 
 import Define
-from systems.bart_vc_ar.datamodule import DataModule
-from systems.bart_vc_ar.expert import System
+from systems import get_system, get_datamodule
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+if Define.DEBUG:
+    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 # TODO: Change training arguments
@@ -66,10 +67,12 @@ def compute_metrics(eval_pred, tokenizer):
 
 
 def main(args):
+    system_name = "t5-base/bart"  # "bart/bart", "t5-base/bart"
+    System, DataModule = get_system(system_name), get_datamodule(system_name)
     config = BartConfig.from_pretrained("voidful/bart-base-unit")
     config.update({"max_position_embeddings": 4096, "tie_word_embeddings": False})
     model = System(config)
-    model.load_hf_pretrained_bart()
+    model.init_from_hf()
     
     tokenizer = AutoTokenizer.from_pretrained("voidful/bart-base-unit")
     if Define.DEBUG:
@@ -120,6 +123,7 @@ def main(args):
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
+    # parser.add_argument("system", type=str, default="t5-base/bart")
     parser.add_argument("-d", "--dataset", type=str, default="lca0503/GPTspeech_encodec")
     parser.add_argument("-t", "--train_splits", type=str, nargs="+", default=["train"])
     parser.add_argument("-e", "--eval_splits", type=str, nargs="+", default=["validation"])

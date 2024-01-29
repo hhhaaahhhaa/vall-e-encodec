@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput, CausalLMOutputWithCrossAttentions
 import transformers.models.bart.modeling_bart as modeling_bart
+import transformers.models.t5.modeling_t5 as modeling_t5
 import copy
 
 from .model import CustomModel
@@ -38,33 +39,25 @@ class System(modeling_bart.BartPreTrainedModel):
         for param in self.model.encoder.parameters():
             param.requires_grad = False
     
-    def init_from_hf(self):
-        self.load_hf_pretrained_bart()
-
     # Modified methods
-    def load_hf_pretrained_bart(self):
+    def init_from_hf(self):
+        self.load_bart_decoder()
+    
+    def load_bart_decoder(self):
         # fit weights from bart-base into custom architecture brutally
         model = modeling_bart.BartForConditionalGeneration.from_pretrained("voidful/bart-base-unit")
-        state_dict = model.state_dict()
-        model_state_dict = self.state_dict()
+        state_dict = model.model.decoder.state_dict()
+        model_state_dict = self.model.decoder.state_dict()
         state_dict_pop_keys = []
         for k in state_dict:
             if k in model_state_dict:
-                # Untie weights
-                if k in ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]:
-                    # print("Untie weight: ", k)
-                    state_dict[k] = copy.deepcopy(state_dict["model.shared.weight"])  # untie weights
+                # Untie
+                if k in ["embed_tokens.weight"]:
+                    state_dict[k] = copy.deepcopy(model.state_dict()["model.shared.weight"])
                 if state_dict[k].shape != model_state_dict[k].shape:
                     print(f"Skip loading parameter: {k}, "
                                 f"required shape: {model_state_dict[k].shape}, "
                                 f"loaded shape: {state_dict[k].shape}")
-                    # deal with positional embeddings
-                    if k == "model.encoder.embed_positions.weight":
-                        # e.g. fit (1026, 768) into (4096, 768)
-                        print("Copy position embedding")
-                        model_state_dict[k][:state_dict[k].shape[0]] = state_dict[k]
-                    if k == "model.decoder.embed_positions.weight":
-                        pass
                     state_dict[k] = model_state_dict[k]
             else:
                 print(f"Dropping parameter {k}")
@@ -79,7 +72,7 @@ class System(modeling_bart.BartPreTrainedModel):
                 state_dict[k] = model_state_dict[k]
         
         # become required shape
-        self.load_state_dict(state_dict)
+        self.model.decoder.load_state_dict(state_dict)
 
     def forward(
         self,
